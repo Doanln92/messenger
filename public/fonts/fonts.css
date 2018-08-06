@@ -1,0 +1,11 @@
+@font-face {
+    font-family: 'Marker';
+    font-style: normal;
+    font-weight: 400;
+    src: url(Permanent+Marker_400_normal.eot); /* {{embedded-opentype-gf-url}} */
+    src: local('☺'),
+        url(Permanent+Marker_400_normal.eot?#iefix) format('embedded-opentype'), /* {{embedded-opentype-gf-url}} */
+        url(Permanent+Marker_400_normal.woff) format('woff'), /* http://fonts.gstatic.com/s/permanentmarker/v7/Fh4uPib9Iyv2ucM6pGQMWimMp004La2CeQ.woff */
+        url(Permanent+Marker_400_normal.ttf) format('truetype'), /* http://fonts.gstatic.com/s/permanentmarker/v7/Fh4uPib9Iyv2ucM6pGQMWimMp004La2Cepb6jlg.ttf */
+        url(Permanent+Marker_400_normal.svg#Permanent+Marker_400_normal) format('svg'); /* http://fonts.gstatic.com/l/font?kit=Fh4uPib9Iyv2ucM6pGQMWimMp004La2CeA&skey=84f486597b8007d1&v=v7#PermanentMarker */
+}
