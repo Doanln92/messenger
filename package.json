@@ -1,0 +1,33 @@
+{
+  "name": "react-chat",
+  "version": "1.0.0",
+  "description": "chat app fore dev",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Doanln92/react-chat-app.git"
+  },
+  "keywords": [
+    "react",
+    "chat",
+    "app",
+    "socket.io",
+    "chat",
+    "react"
+  ],
+  "author": "Doan Le",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Doanln92/react-chat-app/issues"
+  },
+  "homepage": "https://github.com/Doanln92/react-chat-app#readme",
+  "dependencies": {
+    "axios": "^0.18.0",
+    "express": "^4.16.3",
+    "socket.io": "^2.1.1",
+    "xmlhttprequest": "^1.8.0"
+  }
+}
