@@ -99,7 +99,7 @@ io.on("connection", function(socket) {
     // xac minh tai khoan
     socket.on('verify-account', (req)=>{
         let data = req.data;
-        let url = 'http://localhost:8000/api/info/'+data.access_token;
+        let url = 'http://chinhlatoi.com/api/info/'+data.access_token;
         var xml = new XMLHttpRequest();
         xml.open('GET', url);
         xml.send();
@@ -138,7 +138,7 @@ io.on("connection", function(socket) {
 
 
     socket.on('submit-login', (data)=>{
-        let url = 'http://localhost:8000/api/info/'+data.access_token;
+        let url = 'http://chinhlatoi.com/api/info/'+data.access_token;
         var xml = new XMLHttpRequest();
         xml.open('GET', url);
         xml.send();
