@@ -284,3 +284,35 @@ io.on("connection", function(socket) {
     });
 });
 
+
+app.get("/", function(req, res) {
+    res.render("index");
+});
+app.get("/register", function(req, res) {
+    res.render("index");
+});
+app.get("/login", function(req, res) {
+    res.render("index");
+});
+app.get("/logout", function(req, res) {
+    res.render("index");
+});
+app.get("/profile", function(req, res) {
+    res.render("index");
+});
+
+app.get("/profile/info", function(req, res) {
+    res.render("index");
+});
+
+app.get("/profile/account", function(req, res) {
+    res.render("index");
+});
+
+app.get("/profile/password", function(req, res) {
+    res.render("index");
+});
+
+app.get("/profile/messages", function(req, res) {
+    res.render("index");
+});
