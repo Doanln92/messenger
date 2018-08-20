@@ -1,4 +1,4 @@
-﻿var express = require("express");
+var express = require("express");
 var app = express();
 var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 
@@ -6,19 +6,32 @@ app.use(express.static("public"));
 
 var server = require("http").Server(app);
 var io = require("socket.io")(server);
-
+var api_url = 'http://chinhlatoi.com/api';
 server.listen(process.env.PORT || 3000);
 
-
-
-var messages = [];
 var users = [];
-var writeSomeThings = [];
+var ChatRoom = {
+    general:{
+        online:[],
+        members:[],
+        messages:[],
+        writeSomeThings:[]
+    }
+};
 
 function getUser(access_token){
     let user = null;
     users.map((data)=>{
         if(data.access_token == access_token){
+            user = data;
+        }
+    });
+    return user;
+}
+function getUserBy(name,value){
+    let user = null;
+    users.map((data)=>{
+        if(data[name] == value){
             user = data;
         }
     });
@@ -59,39 +72,205 @@ function getUserList(){
 }
 
 io.on("connection", function(socket) {
-    console.log("Co nguoi ket noi với id là  " + socket.id);
+    
+    let isVerify = () => {
+        if(!socket.access_token) return false;
+        if(!getUser(socket.access_token)) return false;
+        return true;
+
+    }
+
+    let getClientAccessToken = () => {
+        socket.emit('get-client-access-token');
+    }
+
+
+
+    let roomEmit = (event, data, to) => {
+        if(socket.myRoom){
+            if(!to || to == 1){
+                socket.broadcast.to(socket.myRoom).emit(event, data);
+            }else{
+                io.to(socket.myRoom).emit(event, data);
+            }
+        }
+    }
+    let checkRoom = () => {
+        if(!socket.myRoom) return false;
+        return (typeof(ChatRoom[socket.myRoom]) != 'undefined');
+    }
+    
     function stopWriting() {
         if(!socket.access_token || socket.access_token===undefined){
             //socket.emit('need-verify-before-send');
             return null;
-        }
+        }if(!checkRoom()) return false;
 
         let user = getUser(socket.access_token);
-        if(writeSomeThings.length && user){
-            writeSomeThings.map((u, i)=>{
+        if(ChatRoom[socket.myRoom].writeSomeThings.length && user){
+            ChatRoom[socket.myRoom].writeSomeThings.map((u, i)=>{
                 if(u.email == user.email){
-                    writeSomeThings.splice(i, 1);
+                    ChatRoom[socket.myRoom].writeSomeThings.splice(i, 1);
                 }
             });
         }
-        socket.broadcast.emit("someone-are-writing", writeSomeThings);
+        roomEmit("someone-are-writing", ChatRoom[socket.myRoom].writeSomeThings);
     }
-    // ngat ket noi
-    socket.on('disconnect', function() {
-        console.log(socket.id+" đã ngắt kết nối");
-        if (typeof socket.access_token != 'undefined') {
-            let usr = null;
-            users.map((u, index)=>{
-                if(u.access_token == socket.access_token){
-                    usr = u;
-                    users.splice(index, 1);
-                    usr.access_token=null;
-                    
+    let getRoomMember = () => {
+        let users = [];
+        if(ChatRoom[socket.myRoom].members.length){
+            ChatRoom[socket.myRoom].members.map((email) => {
+                let mem = getUserBy('email',email);
+                if(mem){
+                    users.push(mem);
                 }
             });
-            socket.broadcast.emit("update-user-list", getUserList());
+        }
+        return users;
+    }
+    
+    const leaveRoom = () => {
+        if(socket.myRoom){
+            let room = socket.myRoom;
+            let user = getUser(socket.access_token);
             stopWriting();
-            if(usr && socket.hasjoin) socket.broadcast.emit('show-popup', usr.name+" vừa offline");
+
+            
+            if(typeof(ChatRoom[socket.myRoom]) != 'undefined'){
+                ChatRoom[socket.myRoom].online.map((email, index)=>{
+                    if(email == user.email){
+                        ChatRoom[socket.myRoom].online.splice(index, 1);
+                    }
+                });
+
+                if(socket.myRoom == 'general'){
+                    ChatRoom[socket.myRoom].members.map((email, index)=>{
+                        if(email == user.email){
+                            ChatRoom[socket.myRoom].members.splice(index, 1);
+                        }
+                    });
+
+                }
+                roomEmit("update-user-list", getRoomMember(),2);
+            }
+            roomEmit('show-popup', user.name+" vừa offline");
+            socket.leave(socket.myRoom);
+            
+            socket.myRoom = null;
+        }
+    }
+    const joinRoom = (room) => {
+        leaveRoom();
+        if(!isVerify()) return getClientAccessToken();
+        let user = getUser(socket.access_token);
+        let assign = () => {
+            socket.join(room);
+            if(ChatRoom[room].online.indexOf(user.email) == -1){
+                ChatRoom[room].online.push(user.email);
+            }
+            if(room === 'general'){
+                ChatRoom[room].members.push(user.email);
+            }
+            socket.myRoom = room;
+            roomEmit("update-user-list", getRoomMember(), 2);
+            roomEmit('show-popup', user.name+" vừa online");
+            socket.emit('join-room-success');
+            socket.emit('update-message-list', ChatRoom[socket.myRoom].messages);
+        };
+
+        if(typeof ChatRoom[room] != 'undefined'){
+            assign();
+        }else{
+            let url = api_url+'/room/'+room;
+            var xml = new XMLHttpRequest();
+            xml.open('GET', url);
+            xml.send();
+            xml.onreadystatechange = () => {
+                if(xml.readyState == 4){
+                    let info;
+                    try{
+                        info = JSON.parse(xml.responseText);
+                    }catch(e){
+                        info = {};
+                        console.log(xml.responseText);
+                    }
+                    
+                    if(typeof info == 'object' && info.data){
+                        let {data} = info;
+                        ChatRoom[data.room] = {
+                            name:data.name,
+                            online:[],
+                            members:data.members,
+                            ref: data.ref,
+                            messages:[],
+                            writeSomeThings:[]
+                        };
+                        assign();
+                        
+                    }else{
+                        // login fail
+                        socket.emit('join-room-fail',info);
+
+                    }
+
+                }
+            }
+        };
+    }
+
+    let addUser = (user) => {
+        let index = getUserIndex(user.access_token);
+        if(index != -1){
+            
+            if(typeof user.socket_ids != 'undefined'){
+                user.socket_ids.push(socket.id);
+            }else{
+                user['socket_ids'] = [socket.id];
+            }
+            
+            users[index] = user;
+        }else{
+            user['socket_ids'] = [socket.id];
+            let u = {};
+            for (const key in user) {
+                if (user.hasOwnProperty(key)) {
+                    const element = user[key];
+                    u[key] = element;
+                }
+            }
+
+            users.push(u);
+        }
+        
+        socket.access_token = user.access_token;
+    }
+
+    let removeUser = () => {
+        users.map((u, index)=>{
+            if(u.access_token == socket.access_token){
+                if(u.socket_ids.length>1){
+                    users[index].socket_ids.map((sid, i)=>{
+                        if(sid == socket.id){
+                            users[index].socket_ids.splice(i, 1);
+                        }
+                    });
+                }
+                else{
+                    users.splice(index, 1);
+                }
+            }
+        });
+        
+    }
+
+    // ngat ket noi
+    socket.on('disconnect', function() {
+        if (typeof socket.access_token != 'undefined') {
+            leaveRoom();
+            removeUser()
+            // socket.broadcast.emit("update-user-list", getUserList());
+            
+            // if(usr && socket.hasjoin) socket.broadcast.emit('show-popup', usr.name+" vừa offline");
             
         }
     });
@@ -99,7 +278,7 @@ io.on("connection", function(socket) {
     // xac minh tai khoan
     socket.on('verify-account', (req)=>{
         let data = req.data;
-        let url = 'http://chinhlatoi.com/api/info/'+data.access_token;
+        let url = api_url+'/info/'+data.access_token;
         var xml = new XMLHttpRequest();
         xml.open('GET', url);
         xml.send();
@@ -117,14 +296,7 @@ io.on("connection", function(socket) {
                 
                 if(typeof info == 'object' && info.data){
                     let user = info.data;
-                    let index = getUserIndex(user.access_token);
-                    if(index != -1){
-                        users[index] = user;
-                    }else{
-                        users.push(user);
-                    }
-                    
-                    socket.access_token = user.access_token;
+                    addUser(user);
                     socket.emit(success, user);
                 }else{
                     // login fail
@@ -138,7 +310,7 @@ io.on("connection", function(socket) {
 
 
     socket.on('submit-login', (data)=>{
-        let url = 'http://chinhlatoi.com/api/info/'+data.access_token;
+        let url = api_url+'/info/'+data.access_token;
         var xml = new XMLHttpRequest();
         xml.open('GET', url);
         xml.send();
@@ -153,16 +325,9 @@ io.on("connection", function(socket) {
                 
                 if(typeof info == 'object' && info.data){
                     let user = info.data;
-                    let index = getUserIndex(user.access_token);
-                    
-                    if(index != -1){
-                        socket.emit('auth-error', user);
-                    }else{
-                        users.push(user);
-                        socket.access_token = user.access_token;
-                        socket.emit("login-success", user);
-                        socket.broadcast.emit("update-user-list", getUserList());
-                    }
+                    addUser(user);
+                    socket.emit("login-success", user);
+                    socket.broadcast.emit("update-user-list", getUserList());
                     
                 }else{
                     // login fail
@@ -181,33 +346,95 @@ io.on("connection", function(socket) {
                 
         if (typeof socket.access_token != 'undefined') {
             let usr = null;
-            users.map((u, index)=>{
-                if(u.access_token == socket.access_token){
-                    usr = u;
-                    users.splice(index, 1);
-                    usr.access_token=null;
-                    
-                }
-            });
-            socket.broadcast.emit("update-user-list", getUserList());
+            leaveRoom();
+            removeUser();
+            //socket.broadcast.emit("update-user-list", getUserList());
             socket.emit(success, usr);
-            if(usr) socket.broadcast.emit('show-popup', usr.name+" vừa offline");
+            //if(usr) socket.broadcast.emit('show-popup', usr.name+" vừa offline");
         }else{
             socket.emit(fail);
         }
         stopWriting();
     });
-    socket.on('joined', ()=>{
-        if(socket.hasjoin) return;
-        let user = getUser(socket.access_token);
-        socket.broadcast.emit("update-user-list", getUserList());
-        socket.broadcast.emit('show-popup', user.name+" vừa online");
-        socket.hasjoin = true;
+
+
+    socket.on('join-room', (room)=>{
+        joinRoom(room);
     });
+
+    socket.on('leave-room', ()=> {
+        leaveRoom();
+    });
+
+    socket.on('leave-group', id => {
+        let {myRoom} = socket;
+        let name = getUser(socket.access_token).name;
+        leaveRoom();
+        setTimeout(()=>{
+
+            socket.broadcast.to(myRoom).emit('show-popup', name+" vừa rời nhóm");
+            socket.broadcast.to(myRoom).emit('anothor-leave-group', id);
+        }, 5000);
+    });
+
+    socket.on('new-member-added', (member) => {
+        roomEmit('show-popup', member.name+" vừa được thêm vào nhóm "+member.group);
+        let u = getUserBy('email', member.email);
+        let admin = getUser(socket.access_token);
+        if(u && u.socket_ids){
+            u.socket_ids.map(sid => {
+                if(admin){
+                    io.to(sid).emit('show-popup', admin.name+" vừa thêm bạn vào nhóm "+member.group);
+                }else{
+                    io.to(sid).emit('show-popup', "Bạn vừa được thêm vào nhóm "+member.group);
+                }
+                io.to(sid).emit('refresh-group');
+            });
+        }
+    });
+    
+    socket.on('remove-member-success', (member) => {
+        roomEmit('show-popup', member.name+" vừa đá khỏi nhóm "+member.group);
+        let u = getUserBy('email', member.email);
+        let admin = getUser(socket.access_token);
+        if(u && u.socket_ids){
+            u.socket_ids.map(sid => {
+                if(admin){
+                    io.to(sid).emit('show-popup', admin.name+" vừa đá bạn khỏi nhóm "+member.group);
+                }else{
+                    io.to(sid).emit('show-popup', "Bạn vừa bị đá khỏi nhóm nhóm "+member.group);
+                }
+                io.to(sid).emit('out-group', member.group_id);
+
+            });
+        }
+    });
+
+    socket.on('delete-group-success', (group) => {
+        let admin = getUser(socket.access_token);
+        roomEmit('show-popup', admin.name+" vừa cóa nhóm "+group.name);
+        if(group.members){
+            group.members.map(email => {
+                let u = getUserBy('email',email);
+                if(email !== admin.email && u && u.socket_ids){
+                    u.socket_ids.map(sid => {
+                        io.to(sid).emit('show-popup', admin.name+" vừa xóa nhóm nhóm "+group.name);
+                        io.to(sid).emit('out-group', group.id);
+                    });
+                }
+            });
+        }
+        
+    });
+    
+
     socket.on('send-message', (data)=>{
         if(!socket.access_token || socket.access_token===undefined){
             socket.emit('need-verify-before-send');
             return null;
+        }
+        if(!checkRoom()){
+            return false;
         }
         if(data.message){
             let user = getUser(socket.access_token);
@@ -218,32 +445,59 @@ io.on("connection", function(socket) {
                 avatar:user.avatar,
                 messages:[message]
             };
+            let {messages} = ChatRoom[socket.myRoom];
             if(messages.length){
-                let lastMsg = messages[messages.length-1];
+                let lasyIndex = messages.length-1;
+                let lastMsg = messages[lasyIndex];
                 
                 if(lastMsg.email === user.email){
                     lastMsg.messages.push(message);
-                    messages[messages.length-1] = lastMsg;
+                    messages[lasyIndex] = lastMsg;
                 }else{
                     messages.push(msg);
                 }
-
-                    
-                
             }else{
                 messages.push(msg);
             }
+            ChatRoom[socket.myRoom].messages = messages;
 
-            console.log(user.name+": "+data.message );
             socket.emit('send-message-success');
-            io.sockets.emit('send-new-message', msg);
+            roomEmit('send-new-message', msg, 2);
+            if(socket.myRoom!=='general'){
+                if(typeof ChatRoom[socket.myRoom] != 'undefined'){
+                    let room = ChatRoom[socket.myRoom];
+                    if(room.members.length){
+                        room.members.map((email, ind) => {
+                            if(email!=user.email && room.online.indexOf(email) == -1){
+
+                                let member = getUserBy('email', email);
+                                if(member && member.socket_ids.length){
+                                    let msg = user.name + " vừa gửi tin nhắn "+(room.ref=='friend'?"cho bạn":"dên nhóm "+room.name);
+                                    member.socket_ids.map((s,i)=>{
+                                        io.to(s).emit('show-popup', msg);
+                                    })
+                                }
+                            }
+                        });
+                    }
+                }
+            }
         }else{
             socket.emit('send-message-empty');
         }
     });
 
+    socket.on('delete-all-message', ()=>{
+        if(!checkRoom()) return;
+        ChatRoom[socket.myRoom].messages = [];
+        roomEmit('update-message-list', ChatRoom[socket.myRoom].messages, 2);
+    })
+ 
     socket.on('get-message-list', () => {
-        socket.emit('update-message-list', messages);
+        if(!checkRoom()){
+            return false;
+        }
+        roomEmit('update-message-list', ChatRoom[socket.myRoom].messages);
     });
 
 
@@ -251,68 +505,62 @@ io.on("connection", function(socket) {
         socket.emit('change-theme', theme);
     });
 
-
-
-    
     socket.on('writing', function() {
         if(!socket.access_token || socket.access_token===undefined){
             return null;
         }
 
+        if(!checkRoom()) return false;
         let user = getUser(socket.access_token);
         let isWritting = false;
-        if(writeSomeThings.length){
-            writeSomeThings.map((u)=>{
+        if(ChatRoom[socket.myRoom].writeSomeThings.length){
+            ChatRoom[socket.myRoom].writeSomeThings.map((u)=>{
                 if(u.email == user.email){
                     isWritting = true;
                 }
             });    
         }
         if(!isWritting){
-            writeSomeThings.push({
+            ChatRoom[socket.myRoom].writeSomeThings.push({
                 name:user.name,
                 email:user.email
             });
         }
-        socket.broadcast.emit("someone-are-writing", writeSomeThings);
+        roomEmit("someone-are-writing", ChatRoom[socket.myRoom].writeSomeThings);
     });
     socket.on('stop-writing', stopWriting);
 
 
     socket.on('get-user-list', ()=>{
-        socket.emit("update-user-list", getUserList());
+        if(!checkRoom()){
+            return false;
+        }
+        
+        socket.emit("update-user-list", getRoomMember());
+    });
+
+    socket.on('update-friend-list', () => {
+        let url = api_url+'/friends/'+socket.access_token;
+        var xml = new XMLHttpRequest();
+        xml.open('GET', url);
+        xml.send();
+        xml.onreadystatechange = () => {
+            if(xml.readyState == 4){
+                let friends;
+                try{
+                    friends = JSON.parse(xml.responseText);
+                }catch(e){
+                    friends = {};
+                }
+                
+                if(typeof friends == 'object' && friends.data){
+                    socket.emit('update-friend-list', friends.data);
+                }else{
+                    
+                }
+
+            }
+        }
     });
 });
 
-
-app.get("/", function(req, res) {
-    res.render("index");
-});
-app.get("/register", function(req, res) {
-    res.render("index");
-});
-app.get("/login", function(req, res) {
-    res.render("index");
-});
-app.get("/logout", function(req, res) {
-    res.render("index");
-});
-app.get("/profile", function(req, res) {
-    res.render("index");
-});
-
-app.get("/profile/info", function(req, res) {
-    res.render("index");
-});
-
-app.get("/profile/account", function(req, res) {
-    res.render("index");
-});
-
-app.get("/profile/password", function(req, res) {
-    res.render("index");
-});
-
-app.get("/profile/messages", function(req, res) {
-    res.render("index");
-});
