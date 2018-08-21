@@ -136,25 +136,27 @@ io.on("connection", function(socket) {
             stopWriting();
 
             
-            if(typeof(ChatRoom[socket.myRoom]) != 'undefined'){
-                ChatRoom[socket.myRoom].online.map((email, index)=>{
-                    if(email == user.email){
-                        ChatRoom[socket.myRoom].online.splice(index, 1);
-                    }
-                });
-
-                if(socket.myRoom == 'general'){
-                    ChatRoom[socket.myRoom].members.map((email, index)=>{
+            if(typeof(ChatRoom[room]) != 'undefined'){
+                if(user){
+                    ChatRoom[room].online.map((email, index)=>{
                         if(email == user.email){
-                            ChatRoom[socket.myRoom].members.splice(index, 1);
+                            ChatRoom[socket.myRoom].online.splice(index, 1);
                         }
                     });
-
+    
+                    if(room == 'general'){
+                        ChatRoom[room].members.map((email, index)=>{
+                            if(email == user.email){
+                                ChatRoom[room].members.splice(index, 1);
+                            }
+                        });
+    
+                    }
+                    roomEmit("update-user-list", getRoomMember(),2);
                 }
-                roomEmit("update-user-list", getRoomMember(),2);
             }
             roomEmit('show-popup', user.name+" vừa offline");
-            socket.leave(socket.myRoom);
+            socket.leave(room);
             
             socket.myRoom = null;
         }
@@ -563,4 +565,3 @@ io.on("connection", function(socket) {
         }
     });
 });
-
